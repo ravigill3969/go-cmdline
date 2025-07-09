@@ -79,6 +79,51 @@ var commandHandlers = map[string]func([]string) error{
 		res := fmt.Sprintf(string(buf[:n]) + "\n")
 		return inout.WriteStdout(res)
 	},
+
+	"cat": func(args []string) error {
+		buf := make([]byte, 4096)
+
+		if len(args) < 1 {
+			return inout.WriteStdout("cat::Not enough arguments provided\n")
+		}
+
+		for i := range args {
+
+			fd, err := syscall.Open(args[i], syscall.O_RDONLY, 0)
+
+			if err != nil {
+				return inout.WriteStdout("Invalid path")
+			}
+
+			defer syscall.Close(fd)
+
+			for {
+
+				n, err := syscall.Read(fd, buf)
+
+				if err != nil {
+					errr := fmt.Sprintf("cat:: %s", err.Error())
+
+					return inout.WriteStdout(errr)
+				}
+
+				if n == 0 {
+					break
+				}
+
+				err = inout.WriteStdout(string(buf[:n]))
+
+				if err != nil {
+					return err
+				}
+			}
+
+			inout.WriteStdout("\n")
+		}
+
+		return nil
+
+	},
 }
 
 func main() {
