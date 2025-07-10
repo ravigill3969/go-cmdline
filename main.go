@@ -10,23 +10,21 @@ import (
 )
 
 var commandToSyscall = map[string]string{
-	"cd":     "chdir",
-	"mkdir":  "mkdir",
-	"rm":     "unlink",
-	"rmdir":  "rmdir",
-	"touch":  "open",
-	"ls":     "getdents",
-	"tree":   "getdents (recursive)",
-	"cat":    "read",
-	"echo":   "write",
-	"whoami": "getuid",
-	"chmod":  "chmod",
-	"chown":  "chown",
-	"stat":   "stat",
-	"fstat":  "fstat",
-	"lstat":  "lstat",
-	"mv":     "rename",
-	"pwd":    "getcwd",
+	// "mkdir":  "mkdir",
+	// "rm":     "unlink",
+	"rmdir": "rmdir",
+	"touch": "open",
+	"ls":    "getdents",
+	"tree":  "getdents (recursive)",
+	// "cat":    "read",
+	// "echo":   "write",
+	// "whoami": "getuid",
+	"chmod": "chmod",
+	"chown": "chown",
+	"stat":  "stat",
+	"fstat": "fstat",
+	// "lstat": "lstat",
+	// "mv":    "rename",
 }
 
 var commandHandlers = map[string]func([]string) error{
@@ -84,7 +82,7 @@ var commandHandlers = map[string]func([]string) error{
 		buf := make([]byte, 4096)
 
 		if len(args) < 1 {
-			return inout.WriteStdout("cat::Not enough arguments provided\n")
+			return inout.WriteStdout("cat:: Not enough arguments provided\n")
 		}
 
 		for i := range args {
@@ -124,6 +122,177 @@ var commandHandlers = map[string]func([]string) error{
 		return nil
 
 	},
+	"mv": func(args []string) error {
+		if len(args) < 2 {
+			return inout.WriteStdout("mv:: Not enough arguments provided\n")
+		}
+
+		err := syscall.Rename(args[0], args[1])
+
+		if err != nil {
+
+			errr := fmt.Sprintf("mv::%s\n", err.Error())
+			return inout.WriteStdout(errr)
+		}
+
+		return nil
+
+	},
+	"lstat": func(args []string) error {
+
+		if len(args) < 1 {
+			return inout.WriteStdout("lstat:: Not enough arguments provided\n")
+		}
+		var stat syscall.Stat_t
+
+		err := syscall.Lstat(args[0], &stat)
+
+		if err != nil {
+			errr := fmt.Sprintf("lstat::%s\n", err.Error())
+			return inout.WriteStdout(errr)
+		}
+
+		output := fmt.Sprintf(
+			"File: %s\nSize: %d bytes\nUID: %d\nGID: %d\nMode: %o\n",
+			args[0],
+			stat.Size,
+			stat.Uid,
+			stat.Gid,
+			stat.Mode,
+		)
+
+		return inout.WriteStdout(output)
+	},
+	"getpid": func(args []string) error {
+		res := syscall.Getpid()
+		return inout.WriteStdout(strconv.Itoa(res) + "\n")
+	},
+	"getppid": func(args []string) error {
+		res := syscall.Getppid()
+		return inout.WriteStdout(strconv.Itoa(res) + "\n")
+
+	},
+	"kill": func(args []string) error {
+		if len(args) < 1 {
+			return inout.WriteStdout("kill: Not enough arguments provided\n")
+		}
+
+		pid, err := strconv.Atoi(args[0])
+		if err != nil {
+			return inout.WriteStdout("kill: Invalid PID\n")
+		}
+
+		sig := syscall.SIGTERM
+
+		if len(args) > 1 {
+			switch args[1] {
+			case "-9", "SIGKILL":
+				sig = syscall.SIGTERM
+			case "-15", "SIGTERM":
+				sig = syscall.SIGTERM
+			default:
+				return inout.WriteStdout("kill: Unknown signal\n")
+			}
+
+		}
+
+		err = syscall.Kill(pid, sig)
+
+		if err != nil {
+			return inout.WriteStdout(fmt.Sprintf("kill: %s\n", err.Error()))
+		}
+		return nil
+	},
+
+	"getIP": func(args []string) error {
+		fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
+		if err != nil {
+			return inout.WriteStdout(fmt.Sprintf("ip::%s\n", err.Error()))
+		}
+
+		defer syscall.Close(fd)
+
+		var addr syscall.SockaddrInet4
+		addr.Port = 80
+		addr.Addr = [4]byte{8, 8, 8, 8}
+
+		err = syscall.Connect(fd, &addr)
+		if err != nil {
+			return inout.WriteStdout(fmt.Sprintf("getsocketname: %s\n", err.Error()))
+		}
+
+		sa, err := syscall.Getsockname(fd)
+
+		if err != nil {
+			return inout.WriteStdout(fmt.Sprintf("getsocketname: %s\n", err.Error()))
+		}
+
+		switch addr := sa.(type) {
+		case *syscall.SockaddrInet4:
+			fmt.Printf("IPv4: %v\n", addr.Addr)
+		case *syscall.SockaddrInet6:
+			fmt.Printf("IPv6: %v\n", addr.Addr)
+		case *syscall.SockaddrUnix:
+			fmt.Printf("Unix socket path: %s\n", addr.Name)
+		default:
+			fmt.Printf("Unknown socket type\n")
+		}
+
+		return nil
+	},
+	"time": func(args []string) error {
+		var t syscall.Time_t
+		t, err := syscall.Time(&t)
+
+		if err != nil {
+			return inout.WriteStdout(fmt.Sprintf("time::%s\n", err.Error()))
+		}
+
+		res := fmt.Sprintf("%s \n", strconv.FormatInt(int64(t), 10))
+		return inout.WriteStdout(res)
+	},
+	"gettimeofday": func(args []string) error {
+		var tod syscall.Timeval
+		err := syscall.Gettimeofday(&tod)
+
+		if err != nil {
+			return inout.WriteStdout(fmt.Sprintf("time::%s\n", err.Error()))
+		}
+
+		return inout.WriteStdout(fmt.Sprintf("%d\n", tod))
+
+	},
+	// "fork": func(args []string) error {
+	// 	if len(args) == 0 {
+	// 		return fmt.Errorf("no command provided")
+	// 	}
+
+	// 	path, err := exec.LookPath(args[0])
+
+	// 	attr := &syscall.ProcAttr{
+	// 		Files: []uintptr{0, 1, 2},
+	// 	}
+
+	// 	if err != nil {
+	// 		return fmt.Errorf("command not found: %s", args[0])
+	// 	}
+
+	// 	_, err = syscall.ForkExec(path, args, attr)
+	// 	if err != nil {
+	// 		return fmt.Errorf("ForkExec failed: %v", err)
+	// 	}
+
+	// 	return nil
+	// },
+	"ls": func(args []string) error {
+		fd, err := syscall.Openat(syscall., ".", syscall.O_RDONLY|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+
+		if err != nil {
+			return fmt.Errorf("ForkExec failed: %v", err)
+		}
+
+		return nil
+	},
 }
 
 func main() {
@@ -146,5 +315,15 @@ func main() {
 	err := handler(cmdArgs)
 	if err != nil {
 		inout.WriteStdout("Error: " + err.Error() + "\n")
+	}
+}
+
+func init() {
+	commandHandlers["netstat"] = func(args []string) error {
+		catFunc, ok := commandHandlers["cat"]
+		if !ok {
+			return inout.WriteStdout("netstat:: 'cat' command not found\n")
+		}
+		return catFunc([]string{"/proc/net/tcp"})
 	}
 }
